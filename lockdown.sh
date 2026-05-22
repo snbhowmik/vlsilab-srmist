@@ -1,6 +1,7 @@
 #!/bin/bash
 # =============================================================================
 #  LOCKDOWN SCRIPT — STUDENT USER RESTRICTIONS
+#  Author: snbhowmik
 #  Purpose : Restrict the student user to only the directories and files
 #            they need for lab work. Run this AFTER all tools are installed
 #            and verified to be working.
@@ -14,12 +15,9 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONFIGURATION  ← edit before running
+# CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
-MACHINE_NUMBER="01"
-SYSADMIN_USER="sysadmin309${MACHINE_NUMBER}"
-STUDENT_USER="srmist309${MACHINE_NUMBER}"
-STUDENT_HOME="/home/${STUDENT_USER}"
+STATE_FILE="/var/log/vlsilab/install.state"
 
 # Set to "true" to preview changes without applying them
 DRY_RUN="false"
@@ -35,6 +33,11 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 section() { echo -e "\n${GREEN}══════════════════════════════════════════${NC}"; \
             echo -e "${GREEN}  $*${NC}"; \
             echo -e "${GREEN}══════════════════════════════════════════${NC}\n"; }
+
+state_get() {
+    local key="$1"
+    grep -m1 "^${key}=" "$STATE_FILE" 2>/dev/null | cut -d'=' -f2- || echo ""
+}
 
 apply_chmod() {
     local mode="$1"; local target="$2"
@@ -53,6 +56,28 @@ apply_chown() {
         chown "$owner" "$target" && info "chown $owner $target"
     fi
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESOLVE MACHINE NUMBER
+# ─────────────────────────────────────────────────────────────────────────────
+MACHINE_NUMBER=""
+if [[ -f "$STATE_FILE" ]]; then
+    MACHINE_NUMBER=$(state_get "MACHINE_NUMBER")
+fi
+
+if [[ -z "$MACHINE_NUMBER" ]]; then
+    warn "Could not read MACHINE_NUMBER from ${STATE_FILE}."
+    read -rp "Enter machine number (1-20): " MACHINE_NUMBER
+    [[ -z "$MACHINE_NUMBER" ]] && error "Machine number cannot be empty."
+fi
+
+SYSADMIN_USER="sysadmin309${MACHINE_NUMBER}"
+STUDENT_USER="srmist309${MACHINE_NUMBER}"
+STUDENT_HOME="/home/${STUDENT_USER}"
+
+info "Machine number : ${MACHINE_NUMBER}"
+info "Sysadmin user  : ${SYSADMIN_USER}"
+info "Student user   : ${STUDENT_USER}"
 
 # Must be run via sudo from the sysadmin account
 [[ $EUID -ne 0 ]] && error "Run this script with sudo:\n  sudo bash $0 [--dry-run]"
@@ -110,7 +135,7 @@ warn "Edit lockdown.sh and uncomment/add chmod lines under STEP 3."
 #  By default, tool dirs are owned by root. The student needs execute access
 #  to run the tools but should NOT be able to modify them.
 #
-#  TODO: Add tool-specific path restrictions here.
+#  TODO: Uncomment the blocks for the tools installed on this machine.
 # ─────────────────────────────────────────────────────────────────────────────
 section "STEP 4: EDA Tool Directory Access"
 
@@ -121,13 +146,33 @@ section "STEP 4: EDA Tool Directory Access"
 # find /opt/Xilinx/*/bin -type f -exec chmod 755 {} \;  # binaries executable
 
 # ── Cadence ─────────────────────────────────────────────────────────────────
-# apply_chmod 755 /home/install                         # student can traverse
-# find /home/install -type d -exec chmod 755 {} \;
-# find /home/install -type f -exec chmod 644 {} \;
-# find /home/install/tools/bin -type f -exec chmod 755 {} \;
+# apply_chmod 755 /opt/cadence                          # student can traverse
+# find /opt/cadence -type d -exec chmod 755 {} \;
+# find /opt/cadence -type f -exec chmod 644 {} \;
+# find /opt/cadence/tools/bin -type f -exec chmod 755 {} \;
+
+# ── Silvaco ─────────────────────────────────────────────────────────────────
+# apply_chmod 755 /opt/sedatools
+# find /opt/sedatools -type d -exec chmod 755 {} \;
+# find /opt/sedatools -type f -exec chmod 644 {} \;
+# find /opt/sedatools/bin -type f -exec chmod 755 {} \;
+
+# ── Synopsys (placeholder) ─────────────────────────────────────────────────
+# TODO: Add Synopsys directory restrictions when tool is installed.
+# apply_chmod 755 /opt/synopsys
+# find /opt/synopsys -type d -exec chmod 755 {} \;
+# find /opt/synopsys -type f -exec chmod 644 {} \;
+# find /opt/synopsys/bin -type f -exec chmod 755 {} \;
+
+# ── CADRE (placeholder) ────────────────────────────────────────────────────
+# TODO: Add CADRE directory restrictions when tool is installed.
+# apply_chmod 755 /opt/cadre
+# find /opt/cadre -type d -exec chmod 755 {} \;
+# find /opt/cadre -type f -exec chmod 644 {} \;
+# find /opt/cadre/bin -type f -exec chmod 755 {} \;
 
 warn "STEP 4 is a placeholder — no rules applied yet."
-warn "Uncomment the relevant blocks for Xilinx / Cadence / Synopsys."
+warn "Uncomment the relevant blocks for Xilinx / Cadence / Silvaco / Synopsys / CADRE."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 : Prevent student from writing to system directories
