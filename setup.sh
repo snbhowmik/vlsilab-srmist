@@ -926,6 +926,76 @@ SILVACO_ENV
         chown "${STUDENT_USER}:${STUDENT_USER}" "$BASHRC"
         info "Silvaco environment written to ${BASHRC}"
     fi
+
+    # ── Desktop shortcuts ─────────────────────────────────────────────────────
+    #  The Silvaco installer creates .desktop files inside a subfolder on the
+    #  student's Desktop:
+    #    ~/Desktop/S.EDA Tools (opt|sedatools)/
+    #
+    #  We copy them to:
+    #    /usr/share/applications/   ← GNOME app menu (system-wide)
+    #    ~/Desktop/                 ← student's desktop (top-level, not buried)
+    #
+    local SILVACO_DESKTOP_DIR="${STUDENT_HOME}/Desktop/S.EDA Tools (opt|sedatools)"
+    local STUDENT_DESKTOP="${STUDENT_HOME}/Desktop"
+    local SYSTEM_APPS="/usr/share/applications"
+    local DESKTOP_FOUND=false
+
+    # Also check root's Desktop and sysadmin's Desktop as fallbacks
+    for SEARCH_DIR in \
+        "${SILVACO_DESKTOP_DIR}" \
+        "/root/Desktop/S.EDA Tools (opt|sedatools)" \
+        "${SYSADMIN_HOME}/Desktop/S.EDA Tools (opt|sedatools)"; do
+
+        if [[ -d "$SEARCH_DIR" ]] && compgen -G "${SEARCH_DIR}/*.desktop" > /dev/null 2>&1; then
+            SILVACO_DESKTOP_DIR="$SEARCH_DIR"
+            DESKTOP_FOUND=true
+            info "Found Silvaco .desktop files in: ${SEARCH_DIR}"
+            break
+        fi
+    done
+
+    if [[ "$DESKTOP_FOUND" == true ]]; then
+        mkdir -p "$STUDENT_DESKTOP"
+        chown "${STUDENT_USER}:${STUDENT_USER}" "$STUDENT_DESKTOP"
+
+        local DESKTOP_COUNT=0
+        for src in "${SILVACO_DESKTOP_DIR}"/*.desktop; do
+            local fname
+            fname="$(basename "$src")"
+
+            # ── Copy to /usr/share/applications/ (GNOME app menu) ────────────
+            cp "$src" "${SYSTEM_APPS}/${fname}"
+            chmod 644 "${SYSTEM_APPS}/${fname}"
+
+            # ── Copy to student's Desktop (top-level) ────────────────────────
+            cp "$src" "${STUDENT_DESKTOP}/${fname}"
+            chown "${STUDENT_USER}:${STUDENT_USER}" "${STUDENT_DESKTOP}/${fname}"
+            chmod 755 "${STUDENT_DESKTOP}/${fname}"
+
+            DESKTOP_COUNT=$(( DESKTOP_COUNT + 1 ))
+        done
+
+        info "Installed ${DESKTOP_COUNT} Silvaco shortcut(s) to app menu and student Desktop."
+
+        # ── Rebuild GNOME app menu database ───────────────────────────────────
+        command -v update-desktop-database &>/dev/null && \
+            update-desktop-database "${SYSTEM_APPS}" && info "GNOME app menu database updated."
+
+        # ── Mark student's desktop icons as trusted (RHEL 8 GNOME) ────────────
+        if command -v gio &>/dev/null; then
+            for f in "${STUDENT_DESKTOP}"/*.desktop; do
+                gio set "$f" metadata::trusted true 2>/dev/null || true
+            done
+            info "Desktop icons marked as trusted."
+        else
+            warn "gio not available — student may need to right-click → 'Allow Launching'."
+        fi
+    else
+        warn "No Silvaco .desktop files found."
+        warn "Expected folder: ${STUDENT_HOME}/Desktop/S.EDA Tools (opt|sedatools)/"
+        warn "Shortcuts can be copied manually after installation."
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
