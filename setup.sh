@@ -359,6 +359,12 @@ write_eda_launcher() {
 #    source-cadence    (then virtuoso, spectre, etc. work as normal binaries)
 # =============================================================================
 
+# ── X11 display — required by all EDA GUIs ───────────────────────────────────
+# Set a sane default so tools work when launched from terminal.
+# GDM is configured to use X11 (WaylandEnable=false in /etc/gdm/custom.conf).
+export DISPLAY="\${DISPLAY:-:0}"
+export XAUTHORITY="\${XAUTHORITY:-\${HOME}/.Xauthority}"
+
 # ── Combined license server — covers ALL tools ───────────────────────────────
 # FlexLM connects to the correct port per tool. No conflicts.
 export LM_LICENSE_FILE="${XILINX_PORT}@${LICENSE_SERVER_IP}:${CADENCE_PORT}@${LICENSE_SERVER_IP}:${SILVACO_PORT}@${LICENSE_SERVER_HOSTNAME}"
@@ -549,9 +555,53 @@ run_pre_install() {
     dnf install --allowerasing -y 'openssl*' \
 	    --skip-broken || warn "Some openssl packages skipped."
 
-    # ── Write EDA launcher and clean .bashrc ──────────────────────────────────
-    write_eda_launcher
-    write_student_bashrc
+    # ── Force X11 / disable Wayland in GDM ───────────────────────────────────
+    # RHEL 8 defaults to Wayland. Many EDA tools (Vivado, Virtuoso, Silvaco)
+    # require X11. This sets X11 as the default for both GDM login and sessions.
+    local GDM_CONF=""
+    if [[ -f "/etc/gdm/custom.conf" ]]; then
+        GDM_CONF="/etc/gdm/custom.conf"
+    elif [[ -f "/etc/gdm3/custom.conf" ]]; then
+        GDM_CONF="/etc/gdm3/custom.conf"
+    fi
+
+    if [[ -n "$GDM_CONF" ]]; then
+        info "Configuring GDM to use X11: ${GDM_CONF}"
+
+        # Uncomment WaylandEnable=false if it's commented out
+        sed -i 's/^#\s*WaylandEnable=false/WaylandEnable=false/' "$GDM_CONF"
+
+        # If the line doesn't exist at all, add it under [daemon]
+        if ! grep -q "^WaylandEnable=false" "$GDM_CONF"; then
+            sed -i '/^\[daemon\]/a WaylandEnable=false' "$GDM_CONF"
+            info "Added WaylandEnable=false under [daemon] section."
+        else
+            info "WaylandEnable=false confirmed in ${GDM_CONF}"
+        fi
+
+        # Also set DefaultSession to gnome-xorg for the login screen
+        if ! grep -q "^DefaultSession=" "$GDM_CONF"; then
+            sed -i '/^\[daemon\]/a DefaultSession=gnome-xorg.desktop' "$GDM_CONF"
+            info "Set DefaultSession=gnome-xorg.desktop"
+        fi
+    else
+        warn "GDM config not found at /etc/gdm/custom.conf or /etc/gdm3/custom.conf"
+        warn "Set WaylandEnable=false manually before rebooting."
+    fi
+
+    # Force X11 as the default for the student user's GNOME session
+    local USER_XSESSION_DIR="/var/lib/AccountsService/users"
+    if [[ -d "$USER_XSESSION_DIR" ]]; then
+        cat > "${USER_XSESSION_DIR}/${STUDENT_USER}" <<XSESSION
+[User]
+Session=gnome-xorg
+XSession=gnome-xorg
+XSESSION
+        info "Set gnome-xorg as default session for ${STUDENT_USER}"
+    fi
+
+    # Set DISPLAY default in the EDA launcher (X11 tools need this)
+    # Will be baked into eda-launcher.sh by write_eda_launcher()
 
     phase_done "PRE_INSTALL"
     info "Pre-install complete. Reboot before installing EDA tools."
