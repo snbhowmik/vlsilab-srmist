@@ -440,6 +440,13 @@ LAUNCHER
 write_student_bashrc() {
     [[ ! -f "$BASHRC" ]] && touch "$BASHRC"
 
+    # If .bashrc already sources the launcher, don't overwrite — just confirm
+    if grep -q "${EDA_LAUNCHER}" "$BASHRC" 2>/dev/null; then
+        info ".bashrc already sources EDA launcher — no changes needed."
+        chown "${STUDENT_USER}:${STUDENT_USER}" "$BASHRC"
+        return 0
+    fi
+
     # Back up existing .bashrc
     if [[ -s "$BASHRC" ]]; then
         cp "$BASHRC" "${BASHRC}.bak"
@@ -470,6 +477,34 @@ BASHRC_CONTENT
 
     chown "${STUDENT_USER}:${STUDENT_USER}" "$BASHRC"
     info "Clean .bashrc written for ${STUDENT_USER}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENSURE BASHRC SOURCES LAUNCHER
+#
+#  Safety net called by every tool install.
+#  If pre-install was skipped or .bashrc was manually edited and lost the
+#  source line, this puts it back without touching the rest of the file.
+# ─────────────────────────────────────────────────────────────────────────────
+ensure_bashrc_sources_launcher() {
+    if [[ ! -f "$BASHRC" ]]; then
+        write_student_bashrc
+        return
+    fi
+
+    if ! grep -q "${EDA_LAUNCHER}" "$BASHRC" 2>/dev/null; then
+        warn ".bashrc is missing the EDA launcher source line — appending it now."
+        cat >> "$BASHRC" <<LAUNCHER_LINE
+
+# ── EDA Tool Launchers (added by setup.sh) ───────────────────────────────────
+[[ -f "${EDA_LAUNCHER}" ]] && source "${EDA_LAUNCHER}"
+# ─────────────────────────────────────────────────────────────────────────────
+LAUNCHER_LINE
+        chown "${STUDENT_USER}:${STUDENT_USER}" "$BASHRC"
+        info "EDA launcher source line added to .bashrc"
+    else
+        info ".bashrc already sources EDA launcher — OK"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -603,6 +638,13 @@ XSESSION
     # Set DISPLAY default in the EDA launcher (X11 tools need this)
     # Will be baked into eda-launcher.sh by write_eda_launcher()
 
+    # ── Write EDA launcher and clean .bashrc ──────────────────────────────────
+    # This must happen in pre-install so .bashrc sources the launcher before
+    # any tool is installed. Each tool install calls write_eda_launcher again
+    # to update the launcher with that tool's wrappers.
+    write_eda_launcher
+    write_student_bashrc
+
     phase_done "PRE_INSTALL"
     info "Pre-install complete. Reboot before installing EDA tools."
     read -rp "  Reboot now? [y/N]: " DO_REBOOT
@@ -735,6 +777,7 @@ run_xilinx() {
     # ── Update EDA launcher with Xilinx wrappers ─────────────────────────────
     # (No direct .bashrc writes — the launcher file handles everything)
     write_eda_launcher
+    ensure_bashrc_sources_launcher
     info "Xilinx environment registered in EDA launcher."
 
     # ── Desktop shortcuts ─────────────────────────────────────────────────────
@@ -1016,6 +1059,7 @@ CADENCE_ENV_BODY
     # ── Update EDA launcher with Cadence wrappers ─────────────────────────────
     # cadence-env.sh is loaded on-demand via the launcher — NOT at shell startup.
     write_eda_launcher
+    ensure_bashrc_sources_launcher
     info "Cadence environment registered in EDA launcher."
 
     phase_done "CADENCE"
@@ -1102,6 +1146,7 @@ run_silvaco() {
 
     # ── Update EDA launcher (Silvaco PATH is already baked into launcher) ────
     write_eda_launcher
+    ensure_bashrc_sources_launcher
     info "Silvaco environment registered in EDA launcher."
 
     # ── Desktop shortcuts ─────────────────────────────────────────────────────
@@ -1233,6 +1278,7 @@ run_cadre() {
 
     # ── Update EDA launcher (CADRE PATH is baked into launcher) ──────────────
     write_eda_launcher
+    ensure_bashrc_sources_launcher
     info "CADRE environment registered in EDA launcher."
 
     phase_done "CADRE"
