@@ -2,7 +2,7 @@
 # =============================================================================
 #  VLSI LAB — UNIFIED EDA SETUP TOOL
 #  SRM Institute of Science and Technology, Trichy
-#  Author: snbhowmik
+#  Author: snbhowmik [Subir Nath Bhowmik]
 #
 #  Run as : sysadmin, using sudo  →  sudo bash setup.sh
 #
@@ -278,8 +278,7 @@ show_dashboard() {
     printf  "  [%b] %-4s %s%s\n" "$(status_icon CADRE)"         "4."  "CADRE VisualTCAD"                    "$(status_time CADRE)"
     echo    "  ──────────────────────────────────────────────────────"
     printf  "  [%b] %-4s %s\n"   "$clock"                       "5."  "Synopsys  (coming soon)"
-    echo    "  ──────────────────────────────────────────────────────"
-    echo ""
+    echo    "  ──────────────────────────────────────────────────────"    echo ""
     echo -e "  ${BOLD}Options${NC}"
     echo -e "  ${GREEN}0${NC}  Run pre-install (dependencies + student user)  ${YELLOW}← do this first${NC}"
 
@@ -637,6 +636,114 @@ XSESSION
 
     # Set DISPLAY default in the EDA launcher (X11 tools need this)
     # Will be baked into eda-launcher.sh by write_eda_launcher()
+
+    # ── Google Chrome ─────────────────────────────────────────────────────────
+    info "Installing Google Chrome ..."
+    local CHROME_TMP
+    CHROME_TMP=$(mktemp -d)
+    curl -fLo "${CHROME_TMP}/google-chrome.rpm" \
+        "https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm"
+    dnf install -y "${CHROME_TMP}/google-chrome.rpm" || \
+        warn "Chrome install failed — may be missing dependencies. Continuing."
+    rm -rf "$CHROME_TMP"
+    info "Google Chrome installed."
+
+    # ── RustDesk ──────────────────────────────────────────────────────────────
+    # Install RustDesk for remote desktop access.
+    # RHEL 8 requires an SELinux policy module to allow RustDesk to run as a
+    # system service — without it, SELinux blocks startup and floods audit logs.
+    info "Installing RustDesk 1.4.6 ..."
+    local RUSTDESK_TMP
+    RUSTDESK_TMP=$(mktemp -d)
+    curl -fLo "${RUSTDESK_TMP}/rustdesk.rpm" \
+        "https://github.com/rustdesk/rustdesk/releases/download/1.4.6/rustdesk-1.4.6-0.x86_64.rpm"
+
+    # RustDesk RPM has dependency on libayatana-appindicator — not in RHEL repos.
+    # Install with --skip-broken / --allowerasing to avoid hard stop.
+    dnf install -y "${RUSTDESK_TMP}/rustdesk.rpm" --allowerasing --skip-broken || \
+        warn "RustDesk install had warnings — continuing with SELinux policy setup."
+    rm -rf "$RUSTDESK_TMP"
+
+    # ── RustDesk SELinux policy (RHEL 8) ─────────────────────────────────────
+    # Without this, SELinux blocks RustDesk from starting and fills audit.log.
+    # Policy translated from upstream Rustdesk docs + Fedora community fix.
+    info "Installing SELinux policy tools for RustDesk ..."
+    dnf install -y selinux-policy-devel make || \
+        warn "SELinux policy tools install failed — RustDesk may produce SELinux alerts."
+
+    local SELINUX_TMP
+    SELINUX_TMP=$(mktemp -d)
+
+    info "Writing RustDesk SELinux policy module ..."
+    cat > "${SELINUX_TMP}/rustdesk.te" <<'RUSTDESK_TE'
+module rustdesk 1.0;
+
+require {
+    type event_device_t;
+    type xserver_t;
+    type xserver_port_t;
+    type sudo_exec_t;
+    type init_t;
+    type ephemeral_port_t;
+    type user_tmp_t;
+    type user_fonts_cache_t;
+    type pulseaudio_home_t;
+    type session_dbusd_tmp_t;
+    type unconfined_dbusd_t;
+    class process execmem;
+    class file { open read create write execute execute_no_trans map setattr lock link unlink };
+    class unix_stream_socket connectto;
+    class tcp_socket name_connect;
+    class dir { add_name remove_name };
+    class sock_file write;
+    class chr_file { open read write };
+}
+
+#============= init_t ==============
+allow init_t xserver_t:unix_stream_socket connectto;
+allow init_t sudo_exec_t:file { open read execute execute_no_trans };
+allow init_t user_tmp_t:file { open write setattr };
+allow init_t self:process execmem;
+allow init_t user_fonts_cache_t:dir { add_name remove_name };
+allow init_t user_fonts_cache_t:file { read write create open link lock unlink };
+allow init_t xserver_port_t:tcp_socket name_connect;
+allow init_t pulseaudio_home_t:file { read write open lock };
+allow init_t session_dbusd_tmp_t:sock_file write;
+allow init_t unconfined_dbusd_t:unix_stream_socket connectto;
+allow init_t ephemeral_port_t:tcp_socket name_connect;
+allow init_t sudo_exec_t:file map;
+
+#============= init_t Wayland (harmless on X11, kept for completeness) ==============
+allow init_t event_device_t:chr_file { open read write };
+allow init_t user_tmp_t:file map;
+RUSTDESK_TE
+
+    if checkmodule -M -m -o "${SELINUX_TMP}/rustdesk.mod" "${SELINUX_TMP}/rustdesk.te" && \
+       semodule_package -o "${SELINUX_TMP}/rustdesk.pp" -m "${SELINUX_TMP}/rustdesk.mod" && \
+       semodule -i "${SELINUX_TMP}/rustdesk.pp"; then
+        info "RustDesk SELinux policy installed successfully."
+        semodule -l | grep rustdesk && info "SELinux module confirmed active." || true
+    else
+        warn "RustDesk SELinux policy install failed — run manually if SELinux alerts appear."
+        warn "Policy file saved at: ${SELINUX_TMP}/rustdesk.te"
+    fi
+    rm -rf "$SELINUX_TMP"
+
+    # Enable and start RustDesk service
+    systemctl enable rustdesk 2>/dev/null && \
+        systemctl start rustdesk 2>/dev/null && \
+        info "RustDesk service enabled and started." || \
+        warn "RustDesk service could not be started — start manually after reboot."
+
+    # ── Flatpak + Flathub ─────────────────────────────────────────────────────
+    info "Installing Flatpak ..."
+    dnf install -y flatpak || warn "Flatpak install failed — continuing."
+
+    info "Adding Flathub remote ..."
+    flatpak remote-add --if-not-exists flathub \
+        https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null && \
+        info "Flathub remote added." || \
+        warn "Flathub remote add failed — run manually: flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
 
     # ── Write EDA launcher and clean .bashrc ──────────────────────────────────
     # This must happen in pre-install so .bashrc sources the launcher before
@@ -1296,8 +1403,8 @@ while true; do
         1) run_xilinx ;;
         2) run_cadence ;;
         3) run_silvaco ;;
-        4) run_synopsys ;;
-        5) run_cadre ;;
+        4) run_cadre ;;
+        5) run_synopsys ;;
         s) continue ;;
         l)
             echo -e "\n${CYAN}── Last 40 lines of install log ──────────────────────${NC}"
