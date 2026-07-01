@@ -578,6 +578,8 @@ run_pre_install() {
 	    glibc glibc-devel glibc.i686 \
 	    libgcc.i686 libstdc++.i686 zlib.i686 \
 	    elfutils-libelf \
+		libXScrnSaver libXScrnSaver-devel \
+		apr-util apr-util-devel \
 	    mesa-libGL mesa-libGLU \
 	    xorg-x11-fonts-75dpi xorg-x11-fonts-misc \
 	    nano gdbm elrepo-release \
