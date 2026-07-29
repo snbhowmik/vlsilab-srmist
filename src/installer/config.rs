@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use chrono::Local;
 
 pub const STATE_DIR: &str = "/var/log/vlsilab";
@@ -33,6 +33,10 @@ impl LabConfig {
             state: HashMap::new(),
         };
         config.load_state();
+
+        if let Ok(cur_dir) = std::env::current_dir() {
+            let _ = config.save_state_key("SCRIPT_DIR", &cur_dir.to_string_lossy());
+        }
         config
     }
 
@@ -66,6 +70,30 @@ impl LabConfig {
             hostname_fqdn,
             state,
         })
+    }
+
+    pub fn get_script_dir(&self) -> PathBuf {
+        if let Some(dir) = self.state.get("SCRIPT_DIR") {
+            PathBuf::from(dir)
+        } else if let Ok(dir) = std::env::current_dir() {
+            dir
+        } else {
+            PathBuf::from(".")
+        }
+    }
+
+    /// Resolves ROOT directory containing vlsilab-srmist/ and tool folders (CADENCE, SILVACO, XILINX, CADRE, SYNOPSYS)
+    pub fn get_root_dir(&self) -> PathBuf {
+        let script_dir = self.get_script_dir();
+        if let Some(parent) = script_dir.parent() {
+            parent.to_path_buf()
+        } else {
+            PathBuf::from("..")
+        }
+    }
+
+    pub fn get_tool_dir(&self, tool_name: &str) -> PathBuf {
+        self.get_root_dir().join(tool_name)
     }
 
     pub fn load_state(&mut self) {
