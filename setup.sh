@@ -1,12 +1,8 @@
 #!/bin/bash
 # =============================================================================
-#  VLSI Lab Setup Tool - Bootstrapper
+#  C2S Setup Tool - Bootstrapper
 #  Version: 1.10.0
 #  Author: snbhowmik
-#
-#  This script is the entry point for the VLSI Lab installation.
-#  It validates the directory structure, creates site configurations,
-#  and launches the Rust-based TUI for cluster management.
 # =============================================================================
 
 set -euo pipefail
@@ -18,11 +14,16 @@ CYAN="\033[1;36m"
 BOLD="\033[1m"
 NC="\033[0m"
 
+REPO_OWNER="snbhowmik"
+REPO_NAME="c2s-setup"
+TUI_BIN_NAME="c2s-setup-linux-amd64"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. DIRECTORY STRUCTURE VALIDATION
 # ─────────────────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}"
+# Since this can be run via curl | bash, $0 might be "bash".
+# We require the user to be in the correct directory.
+SCRIPT_DIR="$(pwd)"
 
 MISSING=0
 for DIR in "CADENCE" "SILVACO" "XILINX" "SYNOPSYS" "CADRE"; do
@@ -36,7 +37,6 @@ if [[ $MISSING -eq 1 ]]; then
     echo -e "You must run this script from the root of the installer repository."
     echo -e "\nExpected Directory Tree:"
     echo -e "  ."
-    echo -e "  ├── setup.sh"
     echo -e "  ├── CADENCE/"
     echo -e "  ├── CADRE/"
     echo -e "  ├── SILVACO/"
@@ -50,7 +50,7 @@ fi
 # PRIVILEGE CHECK
 # ─────────────────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}[ERROR] Run with sudo: sudo bash $0${NC}"
+    echo -e "${RED}[ERROR] Run with sudo: curl -fsSL https://.../setup.sh | sudo bash${NC}"
     exit 1
 fi
 
@@ -69,7 +69,8 @@ echo "  ║            C2S SETUP BOOTSTRAP (v1.10.0)             ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-read -rp "  Enter Institution / Lab Name (e.g. MainLab): " LAB_NAME
+# Read from /dev/tty because stdin is consumed by curl | bash
+read -rp "  Enter Institution / Lab Name (e.g. MainLab): " LAB_NAME < /dev/tty
 LAB_DIR_NAME=$(echo "$LAB_NAME" | tr -cd '[:alnum:]_-')
 
 if [[ -z "$LAB_DIR_NAME" ]]; then
@@ -77,7 +78,7 @@ if [[ -z "$LAB_DIR_NAME" ]]; then
     exit 1
 fi
 
-read -rp "  Enter Hostname format (use \$\$ for machine number, e.g. vlsilab$\$.ist.srmtrichy.edu.in): " HOST_FORMAT
+read -rp "  Enter Hostname format (use \$\$ for machine number, e.g. vlsilab$\$.ist.srmtrichy.edu.in): " HOST_FORMAT < /dev/tty
 
 SITE_CONFIG_DIR="${SCRIPT_DIR}/site_configs/${LAB_DIR_NAME}"
 mkdir -p "${SITE_CONFIG_DIR}"
@@ -93,29 +94,53 @@ EOF
 echo -e "\n  ${GREEN}✔ Site configuration saved to ${CONFIG_FILE}${NC}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. RUST TUI DOWNLOAD & INVOCATION
+# 3. AUTO-UPDATE & SHA VERIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
-TUI_BIN_NAME="c2s-setup-linux-amd64"
-TUI_LOCAL_PATH="${SCRIPT_DIR}/${TUI_BIN_NAME}"
+echo -e "\n  ${CYAN}Checking for latest TUI release on GitHub...${NC}"
 
-# Simulate downloading the binary if it doesn't exist
-if [[ ! -f "${TUI_LOCAL_PATH}" ]]; then
-    echo -e "\n  ${CYAN}Downloading latest Rust TUI release...${NC}"
-    # In a real environment, this would be:
-    # curl -fLo "${TUI_LOCAL_PATH}" "https://github.com/org/repo/releases/latest/download/${TUI_BIN_NAME}"
-    # We leave this commented until the github repo is configured
-    echo -e "  ${YELLOW}Warning: Binary not found and download is currently simulated.${NC}"
-    echo -e "  ${YELLOW}(Please ensure ${TUI_BIN_NAME} is present in this directory.)${NC}"
-fi
+LATEST_RELEASE_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+# Extract the tag name (version)
+LATEST_TAG=$(curl -sL "$LATEST_RELEASE_URL" | grep -Po '"tag_name": "\K.*?(?=")')
 
-if [[ -f "${TUI_LOCAL_PATH}" ]]; then
-    chmod +x "${TUI_LOCAL_PATH}"
-    echo -e "\n  ${GREEN}Launching C2S Setup TUI...${NC}"
-    sleep 1
-    # Pass the site config dir to the TUI if needed via env var
-    export VLSI_SITE_CONFIG="${SITE_CONFIG_DIR}"
-    exec "${TUI_LOCAL_PATH}"
-else
-    echo -e "\n  ${RED}[ERROR] TUI binary not found at ${TUI_LOCAL_PATH}${NC}"
+if [[ -z "$LATEST_TAG" ]]; then
+    echo -e "${RED}[ERROR] Failed to fetch latest release info from GitHub.${NC}"
     exit 1
 fi
+
+echo -e "  Latest Release: ${BOLD}${LATEST_TAG}${NC}"
+
+BIN_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${LATEST_TAG}/${TUI_BIN_NAME}"
+SHA_URL="${BIN_URL}.sha256"
+
+TUI_LOCAL_PATH="${SCRIPT_DIR}/${TUI_BIN_NAME}"
+TUI_SHA_PATH="${TUI_LOCAL_PATH}.sha256"
+
+# Always remove old files to ensure we get the latest clean binary
+rm -f "${TUI_LOCAL_PATH}" "${TUI_SHA_PATH}"
+
+echo -e "  ${YELLOW}Downloading TUI binary...${NC}"
+curl -fsSL -o "${TUI_LOCAL_PATH}" "$BIN_URL"
+echo -e "  ${YELLOW}Downloading SHA256 checksum...${NC}"
+curl -fsSL -o "${TUI_SHA_PATH}" "$SHA_URL"
+
+echo -e "  ${CYAN}Verifying checksum...${NC}"
+# The downloaded sha256 file should look like "hash  c2s-setup-linux-amd64"
+cd "${SCRIPT_DIR}"
+if sha256sum -c "${TUI_SHA_PATH}"; then
+    echo -e "  ${GREEN}✔ Binary verified securely.${NC}"
+else
+    echo -e "${RED}[ERROR] Checksum verification failed! The binary may be corrupted or compromised.${NC}"
+    rm -f "${TUI_LOCAL_PATH}" "${TUI_SHA_PATH}"
+    exit 1
+fi
+
+chmod +x "${TUI_LOCAL_PATH}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. TUI INVOCATION
+# ─────────────────────────────────────────────────────────────────────────────
+echo -e "\n  ${GREEN}Launching C2S Setup TUI...${NC}"
+sleep 1
+
+export VLSI_SITE_CONFIG="${SITE_CONFIG_DIR}"
+exec "${TUI_LOCAL_PATH}"
