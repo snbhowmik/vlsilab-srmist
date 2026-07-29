@@ -1,0 +1,30 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# EDA Tool Installers
+*.bin
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.iso
+
+# Log and state files
+*.log
+*.state
+
+# Ignore tool directories if they are placed inside the repo
+CADENCE/
+SILVACO/
+XILINX/
+SYNOPSYS/
+CADRE/
