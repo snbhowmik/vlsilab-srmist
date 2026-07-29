@@ -587,6 +587,12 @@ run_pre_install() {
 	    libXtst libXrender libXi libXrandr \
 	    libXcursor libXinerama libSM libICE \
 	    libXft libXext libXau libXdmcp \
+	    gcc-toolset-10-gcc gcc-toolset-10-gcc-c++ gcc-toolset-10-gcc-gfortran \
+	    gcc-toolset-10-libquadmath-devel gcc-toolset-10-libstdc++-devel \
+	    elfutils elfutils-devel elfutils-libelf-devel \
+	    gdb gmp-devel libjpeg-turbo-devel libmpc-devel \
+	    mesa-libGLU-devel ncurses-devel openblas-devel \
+	    redhat-lsb snappy-devel \
 	    --skip-broken || warn "Some EDA dependencies failed."
 
     dnf install --allowerasing -y 'openssl*' \
@@ -1385,6 +1391,17 @@ run_cadre() {
     chmod 755 "${BIN_PATH}"
     # Already running as root via sudo — no inner sudo needed
     bash "${BIN_PATH}"
+
+    # ── Firewall Ports for Cadre ─────────────────────────────────────────────
+    info "Configuring firewall for CADRE (Ports 20720, 20721)..."
+    if systemctl is-active --quiet firewalld; then
+        firewall-cmd --permanent --add-port=20720/tcp
+        firewall-cmd --permanent --add-port=20721/tcp
+        firewall-cmd --reload
+        info "Firewall ports 20720 and 20721 opened."
+    else
+        warn "firewalld is not active. Skipping firewall configuration."
+    fi
 
     # ── Update EDA launcher (CADRE PATH is baked into launcher) ──────────────
     write_eda_launcher
