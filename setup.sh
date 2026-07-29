@@ -64,12 +64,13 @@ SILVACO_BIN_3="255017-victory_str-2025-01.bin"
 CADRE_INSTALL_DIR="/opt/cadre"
 CADRE_BIN="Cadre-VisualTCAD-Linux-2025.04.r3-284.bin"
 
-# ── Tool source folders (relative to SCRIPT_DIR) ────────────────────────────
-DIR_CADENCE="${SCRIPT_DIR}/CADENCE"
-DIR_SILVACO="${SCRIPT_DIR}/SILVACO"
-DIR_XILINX="${SCRIPT_DIR}/XILINX"
-DIR_SYNOPSYS="${SCRIPT_DIR}/SYNOPSYS"
-DIR_CADRE="${SCRIPT_DIR}/CADRE"
+# ── Tool source folders (relative to ROOT_DIR, parent of vlsilab-srmist) ────
+ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+DIR_CADENCE="${ROOT_DIR}/CADENCE"
+DIR_SILVACO="${ROOT_DIR}/SILVACO"
+DIR_XILINX="${ROOT_DIR}/XILINX"
+DIR_SYNOPSYS="${ROOT_DIR}/SYNOPSYS"
+DIR_CADRE="${ROOT_DIR}/CADRE"
 
 # ── EDA Launcher ─────────────────────────────────────────────────────────────
 # Single lightweight file sourced by .bashrc.
