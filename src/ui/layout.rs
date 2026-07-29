@@ -46,7 +46,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let header_text = vec![
         Line::from(vec![
-            Span::styled("  VLSI LAB — SRM IST TRICHY setup tool ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("  VLSI Lab Setup Tool (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::styled(" [Author: snbhowmik]", Style::default().fg(Color::Yellow)),
         ]),
         Line::from(vec![
@@ -116,20 +116,8 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         ]).style(if app.config.is_phase_done("CADENCE") { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
 
         Row::new(vec![
-            if app.config.is_phase_done("SILVACO_1") { "✔" } else { "✘" },
-            "3a. Silvaco — TCAD Legacy & Interconnect",
-            &t_sil1,
-        ]).style(if app.config.is_phase_done("SILVACO_1") { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
-
-        Row::new(vec![
-            if app.config.is_phase_done("SILVACO_2") { "✔" } else { "✘" },
-            "3b. Silvaco — Victory TCAD 2025",
-            &t_sil2,
-        ]).style(if app.config.is_phase_done("SILVACO_2") { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
-
-        Row::new(vec![
             if app.config.is_phase_done("SILVACO_3") { "✔" } else { "✘" },
-            "3c. Silvaco — Victory STR 2025",
+            "3. Silvaco TCAD Suite",
             &t_sil3,
         ]).style(if app.config.is_phase_done("SILVACO_3") { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
 
@@ -155,7 +143,7 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         Line::from("  [0] Run System Pre-Install (Dependencies + Student User)"),
         Line::from("  [x] Install Xilinx Vivado/Vitis"),
         Line::from("  [c] Install Cadence Tools"),
-        Line::from("  [s] Install Silvaco TCAD (Runs 3a -> 3b -> 3c)"),
+        Line::from("  [s] Install Silvaco TCAD Suite"),
         Line::from("  [v] Install CADRE VisualTCAD"),
         Line::from("  [u] Open User Management (Add Student & Setup .bashrc)"),
         Line::from("  [p] Solve Missing Dependency / Library (e.g. libpng12.so.0, libQt5Svg)"),
@@ -196,7 +184,7 @@ fn draw_tools_tab(f: &mut Frame, _app: &App, area: Rect) {
         Line::from("Available EDA Installers:"),
         Line::from("  [x] Xilinx Vivado/Vitis 2025.2 (Requires XILINX/ source folder)"),
         Line::from("  [c] Cadence IC618 / SPECTRE191 (Requires CADENCE/ tar archives)"),
-        Line::from("  [s] Silvaco TCAD 3-Part Suite (Requires SILVACO/ bin installers)"),
+        Line::from("  [s] Silvaco TCAD Suite (Requires SILVACO/ bin installers)"),
         Line::from("  [v] CADRE VisualTCAD (Requires CADRE/ installer bin)"),
         Line::from(""),
         Line::from(Span::styled("Note: Pre-install must be completed before tool installations.", Style::default().fg(Color::Yellow))),
