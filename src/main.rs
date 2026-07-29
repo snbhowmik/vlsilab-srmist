@@ -11,6 +11,7 @@ mod app;
 mod installer;
 mod ui;
 mod user_mgr;
+mod network;
 
 use app::{ActiveTab, App, InputMode};
 use installer::config::LabConfig;
@@ -68,6 +69,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                         KeyCode::Char('3') => app.active_tab = ActiveTab::Tools,
                         KeyCode::Char('4') => app.active_tab = ActiveTab::UserMgmt,
                         KeyCode::Char('5') | KeyCode::Char('l') => app.active_tab = ActiveTab::LogStream,
+                        KeyCode::Char('n') => app.active_tab = ActiveTab::Network,
                         KeyCode::Char('0') => {
                             app.active_tab = ActiveTab::LogStream;
                             app.is_busy = true;

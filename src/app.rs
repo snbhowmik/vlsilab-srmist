@@ -1,6 +1,8 @@
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use crate::installer::config::LabConfig;
 use crate::user_mgr::{check_user_exists, is_bashrc_configured, create_or_configure_student_user, LabUser};
+use crate::network::{NetworkState, spawn_network_checks};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveTab {
@@ -9,6 +11,7 @@ pub enum ActiveTab {
     Tools = 2,
     UserMgmt = 3,
     LogStream = 4,
+    Network = 5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +30,7 @@ pub struct App {
     pub logs: Vec<String>,
     pub users_list: Vec<LabUser>,
     pub is_busy: bool,
+    pub network_state: Arc<Mutex<NetworkState>>,
     pub log_rx: mpsc::UnboundedReceiver<String>,
     pub log_tx: mpsc::UnboundedSender<String>,
 }
@@ -43,10 +47,12 @@ impl App {
             logs: Vec::new(),
             users_list: Vec::new(),
             is_busy: false,
+            network_state: Arc::new(Mutex::new(NetworkState::new())),
             log_rx,
             log_tx,
         };
 
+        spawn_network_checks(app.network_state.clone());
         app.refresh_users();
         app.logs.push("[INFO] VLSI Lab Ratatui Setup Tool initialized.".to_string());
         app

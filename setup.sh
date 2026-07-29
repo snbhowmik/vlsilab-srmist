@@ -89,14 +89,17 @@ else
     fi
 
     read -rp "  Enter Hostname format (use \$\$ for machine number, e.g. vlsilab$\$.ist.srmtrichy.edu.in): " HOST_FORMAT < /dev/tty
+    read -rp "  Enter Total Number of Machines in this site: " MACHINE_COUNT < /dev/tty
 
     SITE_CONFIG_DIR="${SCRIPT_DIR}/site_configs/${LAB_DIR_NAME}"
     mkdir -p "${SITE_CONFIG_DIR}"
+    mkdir -p "${SITE_CONFIG_DIR}/machine_states"
 
     CONFIG_FILE="${SITE_CONFIG_DIR}/config.env"
     cat > "${CONFIG_FILE}" <<EOF
 LAB_NAME="${LAB_NAME}"
 HOSTNAME_FORMAT="${HOST_FORMAT}"
+MACHINE_COUNT="${MACHINE_COUNT}"
 CREATED_BY="${SUDO_USER}"
 CREATED_AT="$(date)"
 EOF

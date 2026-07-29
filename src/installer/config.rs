@@ -127,6 +127,14 @@ impl LabConfig {
         for (k, v) in &self.state {
             writeln!(file, "{}={}", k, v)?;
         }
+        
+        if let Ok(site_config_dir) = std::env::var("VLSI_SITE_CONFIG") {
+            let sync_dir = Path::new(&site_config_dir).join("machine_states");
+            let _ = fs::create_dir_all(&sync_dir);
+            let sync_file = sync_dir.join(format!("machine_{}.state", self.machine_number));
+            let _ = fs::copy(STATE_FILE, sync_file);
+        }
+
         Ok(())
     }
 

@@ -3,7 +3,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, Tabs
+        Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, Tabs, Cell
     },
     Frame,
 };
@@ -30,6 +30,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         ActiveTab::Tools => draw_tools_tab(f, app, chunks[2]),
         ActiveTab::UserMgmt => draw_user_mgmt_tab(f, app, chunks[2]),
         ActiveTab::LogStream => draw_log_stream_tab(f, app, chunks[2]),
+        ActiveTab::Network => draw_network_tab(f, app, chunks[2]),
     }
 
     draw_footer(f, app, chunks[3]);
@@ -44,9 +45,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let header_text = vec![
+    let mut header_text = vec![
         Line::from(vec![
-            Span::styled("  C2S CHIPIN EDA Installer (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("  C2S CHIPIN EDA Installer (v1.11.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::styled(" [Author: snbhowmik]", Style::default().fg(Color::Yellow)),
         ]),
         Line::from(vec![
@@ -64,6 +65,17 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(&app.config.student_user),
         ]),
     ];
+    
+    {
+        let net_state = app.network_state.lock().unwrap();
+        if let Some(ref ip) = net_state.whitelisted_ip {
+            header_text[0].spans.push(Span::styled(format!(" [✔ IP: {} Whitelisted]", ip), Style::default().fg(Color::Green)));
+        } else if net_state.is_checking {
+            header_text[0].spans.push(Span::styled(" [Checking C2S IP...]", Style::default().fg(Color::Yellow)));
+        } else {
+            header_text[0].spans.push(Span::styled(" [✖ IP Not Whitelisted / Offline]", Style::default().fg(Color::Red)));
+        }
+    }
 
     let header = Paragraph::new(header_text)
         .block(Block::default().borders(Borders::ALL).title(" Setup System "));
@@ -77,6 +89,7 @@ fn draw_tabs(f: &mut Frame, app: &App, area: Rect) {
         " [3] EDA Tools ",
         " [4] User Mgmt ",
         " [5] Installation Logs ",
+        " [n] Network ",
     ];
 
     let tabs = Tabs::new(titles)
@@ -332,4 +345,34 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ].as_ref())
         .split(popup_layout[1])[1]
+}
+
+fn draw_network_tab(f: &mut Frame, app: &App, area: Rect) {
+    let net_state = app.network_state.lock().unwrap();
+
+    let mut rows = vec![];
+    for check in &net_state.port_checks {
+        let status = match check.is_reachable {
+            Some(true) => Cell::from("✔ OPEN / REACHABLE").style(Style::default().fg(Color::Green)),
+            Some(false) => Cell::from("✖ BLOCKED").style(Style::default().fg(Color::Red)),
+            None => Cell::from("Checking...").style(Style::default().fg(Color::Yellow)),
+        };
+        
+        let row = Row::new(vec![
+            Cell::from(check.tool_name.clone()),
+            Cell::from(check.port.to_string()),
+            status,
+        ]);
+        rows.push(row);
+    }
+
+    let header = Row::new(vec!["Tool", "Port (c2s.cdacb.in)", "Status"])
+        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .bottom_margin(1);
+
+    let table = Table::new(rows, [Constraint::Percentage(30), Constraint::Percentage(30), Constraint::Percentage(40)])
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title(" TCP Port Diagnostics "));
+
+    f.render_widget(table, area);
 }
