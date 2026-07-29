@@ -107,43 +107,63 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. AUTO-UPDATE & SHA VERIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
+TUI_LOCAL_PATH="${SCRIPT_DIR}/${TUI_BIN_NAME}"
+TUI_SHA_PATH="${TUI_LOCAL_PATH}.sha256"
+
 echo -e "\n  ${CYAN}Checking for latest TUI release on GitHub...${NC}"
 
 LATEST_RELEASE_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
-# Extract the tag name (version)
-LATEST_TAG=$(curl -sL "$LATEST_RELEASE_URL" | grep -Po '"tag_name": "\K.*?(?=")' || true)
+# Extract the tag name (version). Use timeouts to avoid hanging indefinitely if offline.
+LATEST_TAG=$(curl --connect-timeout 5 --max-time 10 -sL "$LATEST_RELEASE_URL" | grep -Po '"tag_name": "\K.*?(?=")' || true)
 
+OFFLINE_MODE=0
 if [[ -z "$LATEST_TAG" ]]; then
-    echo -e "${YELLOW}[WARN] Failed to fetch latest release info from GitHub (possibly a pre-release or rate-limited).${NC}"
+    echo -e "${YELLOW}[WARN] Failed to fetch latest release info from GitHub (offline, pre-release, or rate-limited).${NC}"
     echo -e "${YELLOW}[WARN] Falling back to known stable release v1.10.0...${NC}"
     LATEST_TAG="v1.10.0"
+    OFFLINE_MODE=1
+else
+    echo -e "  Latest Release: ${BOLD}${LATEST_TAG}${NC}"
 fi
-
-echo -e "  Latest Release: ${BOLD}${LATEST_TAG}${NC}"
 
 BIN_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${LATEST_TAG}/${TUI_BIN_NAME}"
 SHA_URL="${BIN_URL}.sha256"
 
-TUI_LOCAL_PATH="${SCRIPT_DIR}/${TUI_BIN_NAME}"
-TUI_SHA_PATH="${TUI_LOCAL_PATH}.sha256"
+# Download the SHA file first to see if the local binary already matches
+curl --connect-timeout 5 --max-time 10 -fsSL -o "${TUI_SHA_PATH}" "$SHA_URL" 2>/dev/null || true
 
-# Always remove old files to ensure we get the latest clean binary
-rm -f "${TUI_LOCAL_PATH}" "${TUI_SHA_PATH}"
-
-echo -e "  ${YELLOW}Downloading TUI binary...${NC}"
-curl -fsSL -o "${TUI_LOCAL_PATH}" "$BIN_URL"
-echo -e "  ${YELLOW}Downloading SHA256 checksum...${NC}"
-curl -fsSL -o "${TUI_SHA_PATH}" "$SHA_URL"
-
-echo -e "  ${CYAN}Verifying checksum...${NC}"
-# The downloaded sha256 file should look like "hash  c2s-setup-linux-amd64"
 cd "${SCRIPT_DIR}"
-if sha256sum -c "${TUI_SHA_PATH}"; then
-    echo -e "  ${GREEN}✔ Binary verified securely.${NC}"
-else
-    echo -e "${RED}[ERROR] Checksum verification failed! The binary may be corrupted or compromised.${NC}"
-    rm -f "${TUI_LOCAL_PATH}" "${TUI_SHA_PATH}"
-    exit 1
+DOWNLOAD_REQUIRED=1
+
+if [[ -f "${TUI_SHA_PATH}" && -f "${TUI_LOCAL_PATH}" ]]; then
+    # We have a downloaded SHA and a local binary. Let's verify if they match.
+    if sha256sum --status -c "${TUI_SHA_PATH}" 2>/dev/null; then
+        echo -e "  ${GREEN}✔ Local TUI binary is already up-to-date and verified.${NC}"
+        DOWNLOAD_REQUIRED=0
+    fi
+fi
+
+if [[ $DOWNLOAD_REQUIRED -eq 1 ]]; then
+    if [[ $OFFLINE_MODE -eq 1 && ! -f "${TUI_LOCAL_PATH}" ]]; then
+        echo -e "${RED}[ERROR] No internet connection and no local TUI binary found. Cannot proceed.${NC}"
+        exit 1
+    elif [[ $OFFLINE_MODE -eq 1 && -f "${TUI_LOCAL_PATH}" ]]; then
+        echo -e "  ${YELLOW}[WARN] Working offline. Using existing local TUI binary without updating.${NC}"
+    else
+        echo -e "  ${YELLOW}Downloading TUI binary...${NC}"
+        curl --connect-timeout 30 -fsSL -o "${TUI_LOCAL_PATH}" "$BIN_URL" || {
+            echo -e "${RED}[ERROR] Failed to download TUI binary.${NC}"
+            exit 1
+        }
+        echo -e "  ${CYAN}Verifying checksum...${NC}"
+        if sha256sum -c "${TUI_SHA_PATH}"; then
+            echo -e "  ${GREEN}✔ Binary verified securely.${NC}"
+        else
+            echo -e "${RED}[ERROR] Checksum verification failed! The binary may be corrupted or compromised.${NC}"
+            rm -f "${TUI_LOCAL_PATH}" "${TUI_SHA_PATH}"
+            exit 1
+        fi
+    fi
 fi
 
 chmod +x "${TUI_LOCAL_PATH}"
