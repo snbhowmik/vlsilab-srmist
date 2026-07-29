@@ -33,6 +33,14 @@ pub async fn resolve_and_install_dependency(
     };
 
     let mut found_packages: HashSet<String> = HashSet::new();
+    let ignored_fields: HashSet<&str> = [
+        "Repo", "Filename", "Matched from", "Provide", "Description", "Summary",
+        "URL", "License", "Source", "Size", "Buildtime", "Vendor", "Arch",
+        "Epoch", "Name", "Version", "Release", "Loaded plugins", "Last metadata expiration check",
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     for pattern in &patterns {
         send_log(&tx, &format!("$ dnf provides \"{}\"", pattern));
@@ -59,9 +67,16 @@ pub async fn resolve_and_install_dependency(
                 if line.contains(" : ") && !line.starts_with(' ') && !line.starts_with('\t') {
                     if let Some(pkg_spec) = line.split(" : ").next() {
                         let pkg_spec = pkg_spec.trim();
-                        let base_name = extract_base_package_name(pkg_spec);
-                        if !base_name.is_empty() {
-                            found_packages.insert(base_name);
+                        // Ignore DNF metadata field lines like "Repo : ...", "Filename : ..."
+                        if !pkg_spec.is_empty()
+                            && !pkg_spec.contains(' ')
+                            && !pkg_spec.contains('/')
+                            && !ignored_fields.contains(pkg_spec)
+                        {
+                            let base_name = extract_base_package_name(pkg_spec);
+                            if !base_name.is_empty() && !ignored_fields.contains(base_name.as_str()) {
+                                found_packages.insert(base_name);
+                            }
                         }
                     }
                 }
