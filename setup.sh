@@ -353,10 +353,13 @@ write_eda_launcher() {
 #    genus         → loads Cadence env, launches Genus
 #    deckbuild     → Silvaco (always available — lightweight)
 #    victory       → Silvaco (always available — lightweight)
+#    cwb           → loads Cadre env, launches CWD
+#    cvisual       → loads Cadre env, launches CVISUAL
 #
 #  To manually load an environment in the current shell:
 #    source-xilinx     (then vivado, vitis, etc. work as normal binaries)
 #    source-cadence    (then virtuoso, spectre, etc. work as normal binaries)
+#    source-cadre      (then cwb, cvisual, etc. work as normal binaries)
 # =============================================================================
 
 # ── X11 display — required by all EDA GUIs ───────────────────────────────────
@@ -374,8 +377,26 @@ export XILINXD_LICENSE_FILE="${XILINX_PORT}@${LICENSE_SERVER_IP}:${XILINX_PORT}@
 export PATH="${SILVACO_INSTALL_DIR}/bin:\${PATH}"
 export SFLM_FLEXLM=1
 
-# ── CADRE — always-loaded (lightweight: 1 PATH) ──────────────────────────────
-[[ -d "${CADRE_INSTALL_DIR}/bin" ]] && export PATH="${CADRE_INSTALL_DIR}/bin:\${PATH}"
+# ── CADRE — lazy loader ───────────────────────────────────────────────────────
+# Nothing executes at shell startup. Env loads when you first type cwb/etc.
+_vlsi_load_cadre() {
+    echo "[EDA] Loading Cadre environment..."
+    [[ -f "${CADRE_INSTALL_DIR}/bin/setenv.sh" ]] && source "${CADRE_INSTALL_DIR}/bin/setenv.sh"
+    # Fallback PATH export in case setenv.sh is missing or doesn't export it globally
+    export PATH="${CADRE_INSTALL_DIR}/bin:\${PATH}"
+    # Remove wrappers — Cadre binaries are now on PATH directly
+    unset -f cwb cvisual cdevice2d cdevice3d cdevice_wbg cdevice_thermal source-cadre _vlsi_load_cadre
+    echo "[EDA] Cadre environment ready."
+}
+# Manual loader alias
+source-cadre() { _vlsi_load_cadre; }
+# Wrapper functions
+cwb()             { _vlsi_load_cadre && command cwb "\$@"; }
+cvisual()         { _vlsi_load_cadre && command cvisual "\$@"; }
+cdevice2d()       { _vlsi_load_cadre && command cdevice2d "\$@"; }
+cdevice3d()       { _vlsi_load_cadre && command cdevice3d "\$@"; }
+cdevice_wbg()     { _vlsi_load_cadre && command cdevice_wbg "\$@"; }
+cdevice_thermal() { _vlsi_load_cadre && command cdevice_thermal "\$@"; }
 
 # ── Xilinx — lazy loader ──────────────────────────────────────────────────────
 # Nothing executes at shell startup. Env loads when you first type vivado/vitis.
@@ -468,9 +489,9 @@ fi
 export PATH
 
 # ── EDA Tool Launchers ────────────────────────────────────────────────────────
-# Type: vivado, vitis, virtuoso, spectre, genus, innovus, xcelium
+# Type: vivado, vitis, virtuoso, spectre, genus, innovus, xcelium, cwb, cvisual
 # to automatically load the tool's environment and launch it.
-# Use source-xilinx or source-cadence to load an env without launching a tool.
+# Use source-xilinx, source-cadence, or source-cadre to load an env without launching a tool.
 [[ -f "${EDA_LAUNCHER}" ]] && source "${EDA_LAUNCHER}"
 # ─────────────────────────────────────────────────────────────────────────────
 BASHRC_CONTENT
