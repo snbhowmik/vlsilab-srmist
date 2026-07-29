@@ -36,7 +36,7 @@ pub async fn resolve_and_install_dependency(
     let ignored_fields: HashSet<&str> = [
         "Repo", "Filename", "Matched from", "Provide", "Description", "Summary",
         "URL", "License", "Source", "Size", "Buildtime", "Vendor", "Arch",
-        "Epoch", "Name", "Version", "Release", "Loaded plugins", "Last metadata expiration check",
+        "Epoch", "Name", "Version", "Release", "Other", "Requirement", "Loaded plugins", "Last metadata expiration check",
     ]
     .iter()
     .cloned()
@@ -67,10 +67,11 @@ pub async fn resolve_and_install_dependency(
                 if line.contains(" : ") && !line.starts_with(' ') && !line.starts_with('\t') {
                     if let Some(pkg_spec) = line.split(" : ").next() {
                         let pkg_spec = pkg_spec.trim();
-                        // Ignore DNF metadata field lines like "Repo : ...", "Filename : ..."
+                        // Ignore DNF metadata field lines like "Repo : ...", "Filename : ...", "Other : ..."
                         if !pkg_spec.is_empty()
                             && !pkg_spec.contains(' ')
                             && !pkg_spec.contains('/')
+                            && pkg_spec.chars().any(|c| c.is_ascii_digit())
                             && !ignored_fields.contains(pkg_spec)
                         {
                             let base_name = extract_base_package_name(pkg_spec);
