@@ -65,9 +65,13 @@ fi
 clear
 echo -e "${GREEN}${BOLD}"
 echo "  ╔══════════════════════════════════════════════════════╗"
-echo "  ║            C2S SETUP BOOTSTRAP (v1.10.0)             ║"
+echo "  ║         C2S CHIPIN EDA Installer (v1.10.0)           ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
-echo -e "${NC}"
+echo "  Author: snbhowmik"
+echo "  For more info/feedback visit: https://snbhowmik.dev"
+echo "  Manual: github.com/snbhowmik/c2s-setup/README.md"
+echo "  Or visit: https://snbhowmik.dev/blog/srmist-vlsilab/setup.sh"
+echo -e "${NC}\n"
 
 # Read from /dev/tty because stdin is consumed by curl | bash
 read -rp "  Enter Institution / Lab Name (e.g. MainLab): " LAB_NAME < /dev/tty
@@ -100,11 +104,12 @@ echo -e "\n  ${CYAN}Checking for latest TUI release on GitHub...${NC}"
 
 LATEST_RELEASE_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
 # Extract the tag name (version)
-LATEST_TAG=$(curl -sL "$LATEST_RELEASE_URL" | grep -Po '"tag_name": "\K.*?(?=")')
+LATEST_TAG=$(curl -sL "$LATEST_RELEASE_URL" | grep -Po '"tag_name": "\K.*?(?=")' || true)
 
 if [[ -z "$LATEST_TAG" ]]; then
-    echo -e "${RED}[ERROR] Failed to fetch latest release info from GitHub.${NC}"
-    exit 1
+    echo -e "${YELLOW}[WARN] Failed to fetch latest release info from GitHub (possibly a pre-release or rate-limited).${NC}"
+    echo -e "${YELLOW}[WARN] Falling back to known stable release v1.10.0...${NC}"
+    LATEST_TAG="v1.10.0"
 fi
 
 echo -e "  Latest Release: ${BOLD}${LATEST_TAG}${NC}"

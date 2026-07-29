@@ -46,8 +46,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let header_text = vec![
         Line::from(vec![
-            Span::styled("  C2S Setup Tool (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("  C2S CHIPIN EDA Installer (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::styled(" [Author: snbhowmik]", Style::default().fg(Color::Yellow)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Info/Feedback: ", Style::default().fg(Color::Cyan)),
+            Span::raw("https://snbhowmik.dev  "),
+            Span::styled("Manual: ", Style::default().fg(Color::Cyan)),
+            Span::raw("github.com/snbhowmik/c2s-setup/README.md"),
         ]),
         Line::from(vec![
             Span::styled("  Machine: ", Style::default().fg(Color::Cyan)),
