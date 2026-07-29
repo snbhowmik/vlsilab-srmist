@@ -16,6 +16,7 @@ pub enum InputMode {
     Normal,
     MachineConfigPrompt,
     AddUserPrompt,
+    DependencyPrompt,
 }
 
 pub struct App {
@@ -112,5 +113,25 @@ impl App {
 
         self.is_busy = false;
         self.refresh_users();
+    }
+
+    pub async fn handle_dependency_submit(&mut self) {
+        let input = self.input_buffer.trim().to_string();
+        self.input_buffer.clear();
+        self.input_mode = InputMode::Normal;
+
+        if input.is_empty() {
+            return;
+        }
+
+        self.active_tab = ActiveTab::LogStream;
+        let tx = self.log_tx.clone();
+        self.is_busy = true;
+
+        tokio::spawn(async move {
+            let _ = crate::installer::dependency::resolve_and_install_dependency(&input, tx).await;
+        });
+
+        self.is_busy = false;
     }
 }

@@ -38,6 +38,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_machine_config_modal(f, app);
     } else if app.input_mode == InputMode::AddUserPrompt {
         draw_add_user_modal(f, app);
+    } else if app.input_mode == InputMode::DependencyPrompt {
+        draw_dependency_modal(f, app);
     }
 }
 
@@ -156,6 +158,7 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         Line::from("  [s] Install Silvaco TCAD (Runs 3a -> 3b -> 3c)"),
         Line::from("  [v] Install CADRE VisualTCAD"),
         Line::from("  [u] Open User Management (Add Student & Setup .bashrc)"),
+        Line::from("  [p] Solve Missing Dependency / Library (e.g. libpng12.so.0, libQt5Svg)"),
         Line::from("  [m] Change Machine Number Config"),
         Line::from("  [l] View Live Logs"),
         Line::from("  [q] Quit TUI"),
@@ -248,7 +251,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let status_msg = if app.is_busy {
         " ⏳ Running task in background... Please wait. "
     } else {
-        " Press [1-5] Tabs | [q] Quit | [0] Pre-install | [u] User Mgmt | [m] Machine Config "
+        " Press [1-5] Tabs | [q] Quit | [0] Pre-install | [p] Solve Dependency | [u] User Mgmt | [m] Machine Config "
     };
 
     let footer = Paragraph::new(status_msg)
@@ -292,6 +295,28 @@ fn draw_add_user_modal(f: &mut Frame, app: &App) {
 
     let modal = Paragraph::new(modal_text)
         .block(Block::default().borders(Borders::ALL).title(" Add User Modal "));
+    f.render_widget(modal, area);
+}
+
+fn draw_dependency_modal(f: &mut Frame, app: &App) {
+    let area = centered_rect(72, 35, f.size());
+    f.render_widget(Clear, area);
+
+    let modal_text = vec![
+        Line::from(Span::styled("DNF Dependency & Missing Library Solver", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from("Paste or enter a missing shared library, component, or file name."),
+        Line::from("Examples:"),
+        Line::from("  • libpng12.so.0  -> Resolves & installs 'libpng12'"),
+        Line::from("  • libQt5Svg      -> Resolves & installs 'qt5-qtsvg'"),
+        Line::from("  • libXp.so.6     -> Resolves & installs 'libXp'"),
+        Line::from(""),
+        Line::from(Span::styled(format!(" Library / File Query > {}_", app.input_buffer), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("Press [Enter] to search & auto-install via DNF, [Esc] to cancel."),
+    ];
+
+    let modal = Paragraph::new(modal_text)
+        .block(Block::default().borders(Borders::ALL).title(" Solve Missing Dependency "));
     f.render_widget(modal, area);
 }
 
