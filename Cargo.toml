@@ -1,9 +1,9 @@
 [package]
-name = "vlsilab"
+name = "c2s-setup"
 version = "0.1.0"
 edition = "2021"
 authors = ["snbhowmik <Subir Nath Bhowmik>"]
-description = "Ratatui TUI Installer and Student User Manager for VLSI Lab SRM IST Trichy"
+description = "Ratatui TUI Installer and Student User Manager for C2S Environments"
 
 [dependencies]
 ratatui = "0.26.3"

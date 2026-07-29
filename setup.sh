@@ -65,7 +65,7 @@ fi
 clear
 echo -e "${GREEN}${BOLD}"
 echo "  ╔══════════════════════════════════════════════════════╗"
-echo "  ║         VLSI LAB SETUP BOOTSTRAP (v1.10.0)           ║"
+echo "  ║            C2S SETUP BOOTSTRAP (v1.10.0)             ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -95,7 +95,7 @@ echo -e "\n  ${GREEN}✔ Site configuration saved to ${CONFIG_FILE}${NC}"
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. RUST TUI DOWNLOAD & INVOCATION
 # ─────────────────────────────────────────────────────────────────────────────
-TUI_BIN_NAME="vlsilab-tui-linux-amd64"
+TUI_BIN_NAME="c2s-setup-linux-amd64"
 TUI_LOCAL_PATH="${SCRIPT_DIR}/${TUI_BIN_NAME}"
 
 # Simulate downloading the binary if it doesn't exist
@@ -110,7 +110,7 @@ fi
 
 if [[ -f "${TUI_LOCAL_PATH}" ]]; then
     chmod +x "${TUI_LOCAL_PATH}"
-    echo -e "\n  ${GREEN}Launching VLSI Lab TUI...${NC}"
+    echo -e "\n  ${GREEN}Launching C2S Setup TUI...${NC}"
     sleep 1
     # Pass the site config dir to the TUI if needed via env var
     export VLSI_SITE_CONFIG="${SITE_CONFIG_DIR}"

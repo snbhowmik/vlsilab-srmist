@@ -46,7 +46,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let header_text = vec![
         Line::from(vec![
-            Span::styled("  VLSI Lab Setup Tool (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("  C2S Setup Tool (v1.10.0) ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::styled(" [Author: snbhowmik]", Style::default().fg(Color::Yellow)),
         ]),
         Line::from(vec![

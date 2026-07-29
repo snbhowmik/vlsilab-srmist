@@ -28,3 +28,7 @@ SILVACO/
 XILINX/
 SYNOPSYS/
 CADRE/
+
+# Release artifacts
+c2s-setup-linux-amd64
+c2s-setup-release.tar.gz
