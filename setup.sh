@@ -73,29 +73,36 @@ echo "  Manual: github.com/snbhowmik/c2s-setup/README.md"
 echo "  Or visit: https://snbhowmik.dev/blog/srmist-vlsilab/setup.sh"
 echo -e "${NC}\n"
 
-# Read from /dev/tty because stdin is consumed by curl | bash
-read -rp "  Enter Institution / Lab Name (e.g. MainLab): " LAB_NAME < /dev/tty
-LAB_DIR_NAME=$(echo "$LAB_NAME" | tr -cd '[:alnum:]_-')
+EXISTING_CONFIG=$(find "${SCRIPT_DIR}/site_configs" -mindepth 2 -maxdepth 2 -name "config.env" 2>/dev/null | head -n 1 || true)
 
-if [[ -z "$LAB_DIR_NAME" ]]; then
-    echo -e "${RED}Invalid Lab Name.${NC}"
-    exit 1
-fi
+if [[ -n "$EXISTING_CONFIG" && -f "$EXISTING_CONFIG" ]]; then
+    echo -e "  ${GREEN}✔ Existing site configuration found: ${EXISTING_CONFIG}${NC}"
+    SITE_CONFIG_DIR=$(dirname "$EXISTING_CONFIG")
+else
+    # Read from /dev/tty because stdin is consumed by curl | bash
+    read -rp "  Enter Institution / Lab Name (e.g. MainLab): " LAB_NAME < /dev/tty
+    LAB_DIR_NAME=$(echo "$LAB_NAME" | tr -cd '[:alnum:]_-')
 
-read -rp "  Enter Hostname format (use \$\$ for machine number, e.g. vlsilab$\$.ist.srmtrichy.edu.in): " HOST_FORMAT < /dev/tty
+    if [[ -z "$LAB_DIR_NAME" ]]; then
+        echo -e "${RED}Invalid Lab Name.${NC}"
+        exit 1
+    fi
 
-SITE_CONFIG_DIR="${SCRIPT_DIR}/site_configs/${LAB_DIR_NAME}"
-mkdir -p "${SITE_CONFIG_DIR}"
+    read -rp "  Enter Hostname format (use \$\$ for machine number, e.g. vlsilab$\$.ist.srmtrichy.edu.in): " HOST_FORMAT < /dev/tty
 
-CONFIG_FILE="${SITE_CONFIG_DIR}/config.env"
-cat > "${CONFIG_FILE}" <<EOF
+    SITE_CONFIG_DIR="${SCRIPT_DIR}/site_configs/${LAB_DIR_NAME}"
+    mkdir -p "${SITE_CONFIG_DIR}"
+
+    CONFIG_FILE="${SITE_CONFIG_DIR}/config.env"
+    cat > "${CONFIG_FILE}" <<EOF
 LAB_NAME="${LAB_NAME}"
 HOSTNAME_FORMAT="${HOST_FORMAT}"
 CREATED_BY="${SUDO_USER}"
 CREATED_AT="$(date)"
 EOF
 
-echo -e "\n  ${GREEN}✔ Site configuration saved to ${CONFIG_FILE}${NC}"
+    echo -e "\n  ${GREEN}✔ Site configuration saved to ${CONFIG_FILE}${NC}"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. AUTO-UPDATE & SHA VERIFICATION
