@@ -17,11 +17,28 @@ mod sys_validation;
 use app::{App, InputMode};
 use installer::config::LabConfig;
 
+/// A panic anywhere in the TUI (e.g. a poisoned mutex from a background task)
+/// would otherwise unwind straight past the cleanup at the end of main(),
+/// leaving the user's real terminal stuck in raw mode / the alternate screen
+/// with no visible cursor - it looks like the terminal itself is broken until
+/// they run `reset`. Restore it first, then let the default hook print as usual.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), crossterm::cursor::Show);
+        default_hook(info);
+    }));
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    install_panic_hook();
+
     // Determine current running user
     let sudo_user = std::env::var("SUDO_USER").unwrap_or_else(|_| "sysadmin".to_string());
-    
+
     // Load config or default to machine #1
     let config = LabConfig::load_from_state(&sudo_user)
         .unwrap_or_else(|| LabConfig::new(1, &sudo_user));

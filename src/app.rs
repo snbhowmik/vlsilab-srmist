@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use ratatui::widgets::ListState;
 use crate::installer::config::LabConfig;
@@ -56,7 +57,8 @@ pub struct App {
     pub validation_state: Arc<Mutex<ValidationState>>,
     pub log_rx: mpsc::UnboundedReceiver<String>,
     pub log_tx: mpsc::UnboundedSender<String>,
-    pub tick_count: u64,
+    pub blink_on: bool,
+    last_blink: Instant,
 }
 
 impl App {
@@ -84,7 +86,8 @@ impl App {
             validation_state: Arc::new(Mutex::new(ValidationState::new())),
             log_rx,
             log_tx,
-            tick_count: 0,
+            blink_on: true,
+            last_blink: Instant::now(),
         };
 
         spawn_network_checks(app.network_state.clone());
@@ -128,7 +131,16 @@ impl App {
     }
 
     pub fn on_tick(&mut self) {
-        self.tick_count = self.tick_count.wrapping_add(1);
+        // Wall-clock driven, not tied to how often this fires: the main loop
+        // iterates as fast as key events arrive (no 50ms wait when input is
+        // pending), so a counter incremented once per iteration could flip
+        // several times a second during rapid navigation - flickering the
+        // blink-driven UI (footer text, log-stream banner) instead of blinking
+        // it at a steady, readable rate.
+        if self.last_blink.elapsed() >= Duration::from_millis(500) {
+            self.blink_on = !self.blink_on;
+            self.last_blink = Instant::now();
+        }
 
         let busy_now = self.is_busy();
         if self.was_busy && !busy_now {

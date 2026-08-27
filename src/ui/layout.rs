@@ -23,7 +23,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .style(Style::default().fg(Color::Cyan));
         
     let title = Paragraph::new(Span::styled(
-        " 🚀 C2S CHIPIN EDA Installer (v1.12.2) ",
+        " 🚀 C2S CHIPIN EDA Installer (v1.12.3) ",
         Style::default().add_modifier(Modifier::BOLD),
     ))
     .block(title_block)
@@ -49,7 +49,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     let footer_text = match app.focus {
         Focus::LogStream => if !app.is_busy() {
-            if app.tick_count % 2 == 0 { " [Task Complete] Press [Esc] to return " } else { " " }
+            if app.blink_on { " [Task Complete] Press [Esc] to return " } else { " " }
         } else {
             " Task is running... Please wait "
         },
@@ -286,7 +286,7 @@ fn draw_details(f: &mut Frame, app: &mut App, area: Rect) {
 fn draw_log_stream_tab(f: &mut Frame, app: &mut App, area: Rect) {
     let mut logs = app.logs.clone();
     
-    if !app.is_busy() && app.tick_count % 2 == 0 {
+    if !app.is_busy() && app.blink_on {
         logs.push(String::new());
         logs.push("==================================================".to_string());
         logs.push(" [TASK COMPLETE] Press [Esc] to return to the menu ".to_string());
