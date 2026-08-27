@@ -68,7 +68,7 @@ export IUSHOME="/opt/cadence/INCISIVE152" #not found
 export LECHOME="/opt/cadence/CONFRML211"
 export INNOVUSHOME="/opt/cadence/INNOVUS211"
 export GENUSHOME="/opt/cadence/GENUS211"
-export MODUSHOME="/opt/cadence/MODUS201"
+export MODUSHOME="/opt/cadence/MODUS221"
 export SSVHOME="/opt/cadence/SSV211"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -76,8 +76,9 @@ export SSVHOME="/opt/cadence/SSV211"
 # ─────────────────────────────────────────────────────────────────────────────
 export JASPERHOME="/opt/cadence/JASPER2209"
 export MVSHOME="/opt/cadence/MVS211"
-export SIGRITYHOME="/opt/cadence/SIGRITY20211"
+export SIGRITYHOME="/opt/cadence/SIGRITY20221"
 export STRATUSHOME="/opt/cadence/STRATUS2202"
+export PEGASUSHOME="/opt/cadence/PEGASUSDFM221"
 export XCELIUMHOME="/opt/cadence/XCELIUM2209"
 export ULTRASIMHOME="/opt/cadence/ULTRASIM181" #not found
 export VMANAGERHOME="/opt/cadence/VMANAGER2209"
@@ -150,6 +151,8 @@ _cds_add_path \
     "${SIGRITYHOME}/share/bin" \
     "${STRATUSHOME}/bin" "${STRATUSHOME}/tools.lnx86/bin" "${STRATUSHOME}/tools.lnx86/dfII/bin" \
     "${STRATUSHOME}/share/bin" \
+    "${PEGASUSHOME}/bin" "${PEGASUSHOME}/tools.lnx86/bin" "${PEGASUSHOME}/tools.lnx86/dfII/bin" \
+    "${PEGASUSHOME}/share/bin" \
     "${ULTRASIMHOME}/bin" "${ULTRASIMHOME}/tools.lnx86/bin" "${ULTRASIMHOME}/tools.lnx86/dfII/bin" \
     "${ULTRASIMHOME}/share/bin" \
     "${VMANAGERHOME}/bin" "${VMANAGERHOME}/tools.lnx86/bin" "${VMANAGERHOME}/tools.lnx86/dfII/bin" \

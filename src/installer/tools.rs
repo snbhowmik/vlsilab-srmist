@@ -4,18 +4,6 @@ use tokio::sync::mpsc;
 use crate::installer::config::LabConfig;
 use crate::installer::launcher::recreate_env;
 
-/// Cadence TOOL_HOME directory names expected under /opt/cadence, mirroring
-/// cadence-env.sh. Each ships as an already-extracted folder under CADENCE/ —
-/// unlike Xilinx/Silvaco/CADRE, there's no installer binary to run, just a
-/// directory to place. Tools not yet delivered (e.g. IUSHOME, ULTRASIMHOME —
-/// see cadence-env.sh's "#not found" markers) are skipped, not treated as errors.
-const CADENCE_TOOL_DIRS: &[&str] = &[
-    "LIBERATE201", "IC618", "ASSURA41", "QUANTUS212", "PVS222", "SPECTRE211",
-    "INCISIVE152", "CONFRML211", "INNOVUS211", "GENUS211", "MODUS201", "SSV211",
-    "JASPER2209", "MVS211", "SIGRITY20211", "STRATUS2202", "XCELIUM2209",
-    "ULTRASIM181", "VMANAGER2209", "INTEGRAND63", "JLS211", "SPB221",
-];
-
 pub async fn install_xilinx(
     config: &mut LabConfig,
     tx: mpsc::UnboundedSender<String>,
@@ -34,44 +22,68 @@ pub async fn install_xilinx(
     Ok(())
 }
 
+/// Cadence tools ship as one `.tar.gz` per tool under CADENCE/TOOLS/ (ASSURA41,
+/// GENUS211, IC618, ...), and every one of them, without exception, contains a
+/// top-level directory matching its own filename exactly - `tar xf NAME.tar.gz
+/// -C /opt/cadence/` produces `/opt/cadence/NAME/` on its own. This mirrors the
+/// site's own hand-written CADENCE/TOOLS/tools.sh, which does the same glob
+/// over *.tar.gz. No hardcoded tool-name list: whatever's dropped in TOOLS/
+/// gets installed, and a name typo'd here (as previously happened for MODUS/
+/// SIGRITY) can't drift out of sync with what's actually delivered.
 pub async fn install_cadence(
     config: &mut LabConfig,
     tx: mpsc::UnboundedSender<String>,
 ) -> Result<(), String> {
     send_log(&tx, "[INFO] Installing Cadence tools (Analog + Digital)...");
     let cadence_dir = config.get_tool_dir("CADENCE");
-    if !cadence_dir.exists() {
-        send_log(&tx, &format!("[WARN] CADENCE directory not found at {}. Please place each tool's extracted folder under ROOT/CADENCE/", cadence_dir.display()));
-        return Err("CADENCE directory missing".to_string());
+    let tools_dir = cadence_dir.join("TOOLS");
+    if !tools_dir.exists() {
+        send_log(&tx, &format!("[WARN] {} not found. Please place each tool's .tar.gz archive under CADENCE/TOOLS/", tools_dir.display()));
+        return Err("CADENCE/TOOLS directory missing".to_string());
     }
-
-    prepare_jasper_archive(&cadence_dir, &tx).await;
 
     let dest_root = Path::new("/opt/cadence");
     if let Err(e) = tokio::fs::create_dir_all(dest_root).await {
         return Err(format!("Failed to create {}: {}", dest_root.display(), e));
     }
 
-    let mut installed = 0;
-    let mut skipped = 0;
-    for name in CADENCE_TOOL_DIRS {
-        let src = cadence_dir.join(name);
-        if !src.exists() {
-            send_log(&tx, &format!("[WARN] {} not found under CADENCE/ - skipping (not delivered yet?).", name));
-            skipped += 1;
-            continue;
-        }
+    // JASPER (and anything else shipped the same way) is a doubly-wrapped
+    // *.gtar archive - it won't match the plain *.tar.gz glob below.
+    install_gtar_archives(&tools_dir, dest_root, &tx).await;
 
-        send_log(&tx, &format!("[INFO] Installing {} -> {}/{}...", name, dest_root.display(), name));
-        match copy_tool_dir(&src, dest_root).await {
+    let mut archives: Vec<PathBuf> = match std::fs::read_dir(&tools_dir) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.file_name().map(|n| n.to_string_lossy().ends_with(".tar.gz")).unwrap_or(false))
+            .collect(),
+        Err(e) => return Err(format!("Failed to read {}: {}", tools_dir.display(), e)),
+    };
+    archives.sort();
+
+    if archives.is_empty() {
+        send_log(&tx, &format!("[WARN] No .tar.gz archives found under {}.", tools_dir.display()));
+    }
+
+    let mut installed = 0;
+    let mut failed = 0;
+    for archive in &archives {
+        let file_name = archive.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let name = file_name.strip_suffix(".tar.gz").unwrap_or(&file_name).to_string();
+
+        send_log(&tx, &format!("[INFO] Extracting {} -> {}/{}...", file_name, dest_root.display(), name));
+        match extract_archive(archive, dest_root).await {
             Ok(()) => {
                 send_log(&tx, &format!("[SUCCESS] {} installed.", name));
                 installed += 1;
             }
-            Err(e) => send_log(&tx, &format!("[ERROR] Failed to install {}: {}", name, e)),
+            Err(e) => {
+                send_log(&tx, &format!("[ERROR] Failed to extract {}: {}", file_name, e));
+                failed += 1;
+            }
         }
     }
-    send_log(&tx, &format!("[INFO] Cadence copy pass complete: {} installed, {} skipped.", installed, skipped));
+    send_log(&tx, &format!("[INFO] Cadence extraction pass complete: {} installed, {} failed.", installed, failed));
 
     config.mark_phase_done("CADENCE").map_err(|e| e.to_string())?;
     let _ = recreate_env("cadence", tx.clone()).await;
@@ -79,83 +91,104 @@ pub async fn install_cadence(
     Ok(())
 }
 
-/// `cp -a <src> <dest_parent>/` — copies src as dest_parent/<basename(src)>,
-/// preserving permissions and symlinks the way these tool trees expect. Safe to
-/// re-run: an existing destination folder is merged into, not replaced.
-async fn copy_tool_dir(src: &Path, dest_parent: &Path) -> Result<(), String> {
-    let status = Command::new("cp")
-        .arg("-a")
-        .arg(src)
-        .arg(dest_parent)
+/// `tar -xf <archive> -C <dest_root>` — auto-detects gzip vs plain tar, so it
+/// works for both the *.tar.gz tools and (via install_gtar_archives) the
+/// already-extracted-to-a-tmp-dir *.gtar payload.
+async fn extract_archive(archive: &Path, dest_root: &Path) -> Result<(), String> {
+    let status = Command::new("tar")
+        .arg("-xf")
+        .arg(archive)
+        .arg("-C")
+        .arg(dest_root)
         .status()
         .await
-        .map_err(|e| format!("failed to spawn cp: {}", e))?;
+        .map_err(|e| format!("failed to spawn tar: {}", e))?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("cp exited with {:?}", status.code()))
+        Err(format!("tar exited with {:?}", status.code()))
     }
 }
 
-/// JASPER is delivered as a double-wrapped archive (observed as `*.tar.gz.gtar`)
-/// whose extraction produces a folder that itself contains a single inner
-/// folder — the real JasperGold payload is inside that. If CADENCE/JASPER2209/
-/// doesn't exist yet, find that raw archive and unwrap it in place so the copy
-/// pass above can treat JASPER exactly like every other tool folder.
-async fn prepare_jasper_archive(cadence_dir: &Path, tx: &mpsc::UnboundedSender<String>) {
-    let jasper_dir = cadence_dir.join("JASPER2209");
-    if jasper_dir.exists() {
+/// Some tools (currently just JASPER, delivered as `*.tar.gz.gtar`) ship as a
+/// doubly-wrapped archive: extracting it produces a folder that itself
+/// contains one more single-child folder before the real payload. Neither
+/// wrapper folder is named after the tool, so it can't go through the plain
+/// extraction loop above. Finds every such archive under CADENCE/TOOLS/,
+/// extracts each to a scratch dir *outside* the (possibly read-only/removable)
+/// source media, unwraps however many redundant single-child levels wrap the
+/// payload, and moves that payload straight into /opt/cadence/<NAME>/ - name
+/// derived from the archive's own filename, not hardcoded.
+async fn install_gtar_archives(tools_dir: &Path, dest_root: &Path, tx: &mpsc::UnboundedSender<String>) {
+    let archives = find_gtar_archives(tools_dir);
+    for archive in archives {
+        install_one_gtar_archive(&archive, dest_root, tx).await;
+    }
+}
+
+fn find_gtar_archives(tools_dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(tools_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().map(|e| e == "gtar").unwrap_or(false) {
+                found.push(path);
+            }
+        }
+    }
+    found
+}
+
+async fn install_one_gtar_archive(archive: &Path, dest_root: &Path, tx: &mpsc::UnboundedSender<String>) {
+    let file_name = archive.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+
+    let mut target_name = file_name.clone();
+    for suffix in [".gtar", ".tar.gz", ".tgz", ".tar"] {
+        if let Some(stripped) = target_name.strip_suffix(suffix) {
+            target_name = stripped.to_string();
+        }
+    }
+    if target_name.is_empty() || target_name == file_name {
+        send_log(tx, &format!("[ERROR] Could not derive a target directory name from {} - skipping.", file_name));
         return;
     }
 
-    let archive = match find_jasper_archive(cadence_dir) {
-        Some(a) => a,
-        None => return, // Nothing to unwrap; the copy pass will just report it missing.
-    };
+    let dest = dest_root.join(&target_name);
+    if dest.exists() {
+        send_log(tx, &format!("[INFO] {} already exists at {} - skipping re-extraction.", target_name, dest.display()));
+        return;
+    }
 
-    send_log(tx, &format!("[INFO] Found raw JASPER archive {} - extracting...", archive.display()));
+    send_log(tx, &format!("[INFO] Found double-wrapped archive {} - extracting as {}...", file_name, target_name));
 
-    let tmp_dir = cadence_dir.join(".jasper_extract_tmp");
+    let tmp_dir = std::env::temp_dir().join(format!("cadence_gtar_extract_{}", target_name));
     let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
     if let Err(e) = tokio::fs::create_dir_all(&tmp_dir).await {
-        send_log(tx, &format!("[ERROR] Could not create extraction dir: {}", e));
+        send_log(tx, &format!("[ERROR] Could not create extraction scratch dir: {}", e));
         return;
     }
 
-    let extracted = Command::new("tar")
-        .arg("-xf")
-        .arg(&archive)
-        .arg("-C")
-        .arg(&tmp_dir)
-        .status()
-        .await;
-
-    match extracted {
-        Ok(s) if s.success() => {}
-        Ok(s) => {
-            send_log(tx, &format!("[ERROR] tar extraction failed (code {:?}). Extract {} into CADENCE/JASPER2209/ manually.", s.code(), archive.display()));
-            return;
-        }
-        Err(e) => {
-            send_log(tx, &format!("[ERROR] Failed to run tar: {}. Extract {} into CADENCE/JASPER2209/ manually.", e, archive.display()));
-            return;
-        }
+    if let Err(e) = extract_archive(archive, &tmp_dir).await {
+        send_log(tx, &format!("[ERROR] Failed to extract {}: {}. Extract it into {} manually.", file_name, e, dest.display()));
+        let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+        return;
     }
 
     // Unwrap however many levels of "single subfolder" wrapping the vendor
-    // archive added, then move the real contents into JASPER2209/.
+    // archive added, then move the real contents into the destination.
     let payload_dir = unwrap_single_child_dirs(&tmp_dir).await.unwrap_or_else(|| tmp_dir.clone());
 
-    if let Err(e) = tokio::fs::create_dir_all(&jasper_dir).await {
-        send_log(tx, &format!("[ERROR] Could not create {}: {}", jasper_dir.display(), e));
+    if let Err(e) = tokio::fs::create_dir_all(&dest).await {
+        send_log(tx, &format!("[ERROR] Could not create {}: {}", dest.display(), e));
+        let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
         return;
     }
 
     let mut moved = 0;
     if let Ok(mut entries) = tokio::fs::read_dir(&payload_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
-            let dest = jasper_dir.join(entry.file_name());
-            if tokio::fs::rename(entry.path(), &dest).await.is_ok() {
+            let dest_entry = dest.join(entry.file_name());
+            if tokio::fs::rename(entry.path(), &dest_entry).await.is_ok() {
                 moved += 1;
             }
         }
@@ -164,28 +197,10 @@ async fn prepare_jasper_archive(cadence_dir: &Path, tx: &mpsc::UnboundedSender<S
     let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
 
     if moved > 0 {
-        send_log(tx, &format!("[SUCCESS] Unpacked JASPER archive into {} ({} entries).", jasper_dir.display(), moved));
+        send_log(tx, &format!("[SUCCESS] {} installed ({} entries).", target_name, moved));
     } else {
-        send_log(tx, &format!("[ERROR] Extracted {} but found nothing to move into JASPER2209/ - check the archive layout manually.", archive.display()));
+        send_log(tx, &format!("[ERROR] Extracted {} but found nothing to move into {} - check the archive layout manually.", file_name, dest.display()));
     }
-}
-
-/// Finds the raw JASPER vendor archive under CADENCE/, matched by filename
-/// (case-insensitive "jasper" plus a tar-like extension) rather than a fixed
-/// name, since the exact vendor filename varies by delivery.
-fn find_jasper_archive(cadence_dir: &Path) -> Option<PathBuf> {
-    let entries = std::fs::read_dir(cadence_dir).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let name = path.file_name()?.to_string_lossy().to_lowercase();
-        if name.contains("jasper") && (name.ends_with(".gtar") || name.ends_with(".tar.gz") || name.ends_with(".tgz") || name.ends_with(".tar")) {
-            return Some(path);
-        }
-    }
-    None
 }
 
 /// Descends into a directory as long as it contains exactly one entry and that
