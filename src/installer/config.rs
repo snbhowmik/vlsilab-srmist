@@ -7,8 +7,8 @@ use chrono::Local;
 pub const STATE_DIR: &str = "/var/log/vlsilab";
 pub const STATE_FILE: &str = "/var/log/vlsilab/install.state";
 pub const LOG_FILE: &str = "/var/log/vlsilab/install.log";
-pub const VLSILAB_DIR: &str = "/opt/vlsilab";
 pub const EDA_LAUNCHER: &str = "/opt/vlsilab/eda-launcher.sh";
+pub const CADENCE_ENV_FILE: &str = "/opt/cadence/cadence-env.sh";
 
 #[derive(Debug, Clone)]
 pub struct LabConfig {

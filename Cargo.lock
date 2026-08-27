@@ -55,6 +55,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "c2s-setup"
+version = "0.1.0"
+dependencies = [
+ "ansi-to-tui",
+ "chrono",
+ "crossterm",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "tokio",
+ "users",
+]
+
+[[package]]
 name = "cassowary"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -719,20 +733,6 @@ checksum = "24cc0f6d6f267b73e5a2cadf007ba8f9bc39c6a6f9666f8cf25ea809a153b032"
 dependencies = [
  "libc",
  "log",
-]
-
-[[package]]
-name = "vlsilab"
-version = "0.1.0"
-dependencies = [
- "ansi-to-tui",
- "chrono",
- "crossterm",
- "ratatui",
- "serde",
- "serde_json",
- "tokio",
- "users",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 use crate::installer::config::LabConfig;
-use crate::installer::launcher::write_eda_launcher;
+use crate::installer::launcher::recreate_env;
 
 pub async fn install_xilinx(
     config: &mut LabConfig,
@@ -15,7 +15,7 @@ pub async fn install_xilinx(
 
     send_log(&tx, "[INFO] Running Xilinx setup script...");
     config.mark_phase_done("XILINX").map_err(|e| e.to_string())?;
-    let _ = write_eda_launcher(config, tx.clone()).await;
+    let _ = recreate_env("xilinx", tx.clone()).await;
     send_log(&tx, "[SUCCESS] Xilinx installation complete.");
     Ok(())
 }
@@ -32,7 +32,7 @@ pub async fn install_cadence(
     }
 
     config.mark_phase_done("CADENCE").map_err(|e| e.to_string())?;
-    let _ = write_eda_launcher(config, tx.clone()).await;
+    let _ = recreate_env("cadence", tx.clone()).await;
     send_log(&tx, "[SUCCESS] Cadence installation complete.");
     Ok(())
 }
@@ -47,7 +47,7 @@ pub async fn install_silvaco(
     send_log(&tx, &format!("[INFO] Installing Silvaco Part {} from {}...", part, silvaco_dir.display()));
     
     config.mark_phase_done(&phase_key).map_err(|e| e.to_string())?;
-    let _ = write_eda_launcher(config, tx.clone()).await;
+    let _ = recreate_env("silvaco", tx.clone()).await;
     send_log(&tx, &format!("[SUCCESS] Silvaco Part {} complete.", part));
     Ok(())
 }
@@ -60,7 +60,7 @@ pub async fn install_cadre(
     send_log(&tx, &format!("[INFO] Installing CADRE VisualTCAD from {}...", cadre_dir.display()));
     
     config.mark_phase_done("CADRE").map_err(|e| e.to_string())?;
-    let _ = write_eda_launcher(config, tx.clone()).await;
+    let _ = recreate_env("cadre", tx.clone()).await;
     send_log(&tx, "[SUCCESS] CADRE VisualTCAD installation complete.");
     Ok(())
 }

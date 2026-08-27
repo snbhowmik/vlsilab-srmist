@@ -12,11 +12,10 @@ mod installer;
 mod ui;
 mod user_mgr;
 mod network;
+mod sys_validation;
 
-use app::{ActiveTab, App, InputMode};
+use app::{App, InputMode};
 use installer::config::LabConfig;
-use installer::preinstall::run_preinstall;
-use installer::tools::{install_cadence, install_cadre, install_silvaco, install_xilinx};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -57,6 +56,7 @@ async fn run_app<B: ratatui::backend::Backend>(
 ) -> io::Result<()> {
     loop {
         app.poll_logs();
+        app.on_tick();
         terminal.draw(|f| ui::layout::draw(f, app))?;
 
         if event::poll(Duration::from_millis(50))? {
@@ -64,58 +64,61 @@ async fn run_app<B: ratatui::backend::Backend>(
                 match app.input_mode {
                     InputMode::Normal => match key.code {
                         KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Char('1') => app.active_tab = ActiveTab::Dashboard,
-                        KeyCode::Char('2') => app.active_tab = ActiveTab::PreInstall,
-                        KeyCode::Char('3') => app.active_tab = ActiveTab::Tools,
-                        KeyCode::Char('4') => app.active_tab = ActiveTab::UserMgmt,
-                        KeyCode::Char('5') | KeyCode::Char('l') => app.active_tab = ActiveTab::LogStream,
-                        KeyCode::Char('n') => app.active_tab = ActiveTab::Network,
-                        KeyCode::Char('0') => {
-                            app.active_tab = ActiveTab::LogStream;
-                            app.is_busy = true;
-                            let tx = app.log_tx.clone();
-                            let mut cfg = app.config.clone();
-                            tokio::spawn(async move {
-                                let _ = run_preinstall(&mut cfg, tx).await;
-                            });
-                            app.is_busy = false;
+                        KeyCode::Esc | KeyCode::Left => {
+                            if app.focus == app::Focus::LogStream {
+                                app.focus = app::Focus::MainMenu;
+                            } else if app.focus == app::Focus::SubMenu {
+                                app.focus = app::Focus::MainMenu;
+                                app.sub_menu_state.select(Some(0));
+                            }
                         }
-                        KeyCode::Char('x') => {
-                            app.active_tab = ActiveTab::LogStream;
-                            let tx = app.log_tx.clone();
-                            let mut cfg = app.config.clone();
-                            tokio::spawn(async move {
-                                let _ = install_xilinx(&mut cfg, tx).await;
-                            });
+                        KeyCode::Right => {
+                            if app.focus == app::Focus::MainMenu {
+                                app.focus = app::Focus::SubMenu;
+                            }
                         }
-                        KeyCode::Char('c') => {
-                            app.active_tab = ActiveTab::LogStream;
-                            let tx = app.log_tx.clone();
-                            let mut cfg = app.config.clone();
-                            tokio::spawn(async move {
-                                let _ = install_cadence(&mut cfg, tx).await;
-                            });
+                        KeyCode::Up => {
+                            if app.focus == app::Focus::MainMenu {
+                                let i = match app.main_menu_state.selected() {
+                                    Some(i) => if i == 0 { 0 } else { i - 1 },
+                                    None => 0,
+                                };
+                                app.main_menu_state.select(Some(i));
+                                app.sub_menu_state.select(Some(0));
+                            } else if app.focus == app::Focus::SubMenu {
+                                let i = match app.sub_menu_state.selected() {
+                                    Some(i) => if i == 0 { 0 } else { i - 1 },
+                                    None => 0,
+                                };
+                                app.sub_menu_state.select(Some(i));
+                            }
                         }
-                        KeyCode::Char('s') => {
-                            app.active_tab = ActiveTab::LogStream;
-                            let tx = app.log_tx.clone();
-                            let mut cfg = app.config.clone();
-                            tokio::spawn(async move {
-                                let _ = install_silvaco(&mut cfg, 1, tx.clone()).await;
-                                let _ = install_silvaco(&mut cfg, 2, tx.clone()).await;
-                                let _ = install_silvaco(&mut cfg, 3, tx.clone()).await;
-                            });
+                        KeyCode::Down => {
+                            if app.focus == app::Focus::MainMenu {
+                                let max_idx = app.current_main_menu_max_idx();
+                                let i = match app.main_menu_state.selected() {
+                                    Some(i) => if i >= max_idx { max_idx } else { i + 1 },
+                                    None => 0,
+                                };
+                                app.main_menu_state.select(Some(i));
+                                app.sub_menu_state.select(Some(0));
+                            } else if app.focus == app::Focus::SubMenu {
+                                let max_idx = app.current_sub_menu_max_idx();
+                                let i = match app.sub_menu_state.selected() {
+                                    Some(i) => if i >= max_idx { max_idx } else { i + 1 },
+                                    None => 0,
+                                };
+                                app.sub_menu_state.select(Some(i));
+                            }
                         }
-                        KeyCode::Char('v') => {
-                            app.active_tab = ActiveTab::LogStream;
-                            let tx = app.log_tx.clone();
-                            let mut cfg = app.config.clone();
-                            tokio::spawn(async move {
-                                let _ = install_cadre(&mut cfg, tx).await;
-                            });
+                        KeyCode::Enter => {
+                            if app.focus == app::Focus::MainMenu {
+                                app.focus = app::Focus::SubMenu;
+                            } else if app.focus == app::Focus::SubMenu {
+                                app.handle_sub_menu_execute();
+                            }
                         }
-                        KeyCode::Char('u') => app.active_tab = ActiveTab::UserMgmt,
-                        KeyCode::Char('a') if app.active_tab == ActiveTab::UserMgmt => {
+                        KeyCode::Char('a') if app.main_menu_state.selected() == Some(5) => {
                             app.input_mode = InputMode::AddUserPrompt;
                             app.input_buffer.clear();
                         }
@@ -157,7 +160,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                     },
                     InputMode::AddUserPrompt => match key.code {
                         KeyCode::Enter => {
-                            app.handle_add_user_submit().await;
+                            app.handle_add_user_submit();
                         }
                         KeyCode::Esc => {
                             app.input_buffer.clear();
@@ -173,7 +176,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                     },
                     InputMode::DependencyPrompt => match key.code {
                         KeyCode::Enter => {
-                            app.handle_dependency_submit().await;
+                            app.handle_dependency_submit();
                         }
                         KeyCode::Esc => {
                             app.input_buffer.clear();
