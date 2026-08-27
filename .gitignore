@@ -1,5 +1,6 @@
 # Rust / Cargo
 target/
+my-target/
 **/*.rs.bk
 
 # Editor / OS
@@ -32,3 +33,4 @@ CADRE/
 # Release artifacts
 c2s-setup-linux-amd64
 c2s-setup-release.tar.gz
+*.sha256
