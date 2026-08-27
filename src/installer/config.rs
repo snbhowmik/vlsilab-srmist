@@ -82,14 +82,12 @@ impl LabConfig {
         }
     }
 
-    /// Resolves ROOT directory containing vlsilab-srmist/ and tool folders (CADENCE, SILVACO, XILINX, CADRE, SYNOPSYS)
+    /// Resolves the ROOT directory containing the tool folders (CADENCE, SILVACO,
+    /// XILINX, CADRE, SYNOPSYS). setup.sh validates those as direct children of
+    /// wherever it was invoked from and launches the TUI with that same cwd, so
+    /// ROOT is SCRIPT_DIR itself — not its parent.
     pub fn get_root_dir(&self) -> PathBuf {
-        let script_dir = self.get_script_dir();
-        if let Some(parent) = script_dir.parent() {
-            parent.to_path_buf()
-        } else {
-            PathBuf::from("..")
-        }
+        self.get_script_dir()
     }
 
     pub fn get_tool_dir(&self, tool_name: &str) -> PathBuf {
